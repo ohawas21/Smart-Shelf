@@ -1,6 +1,7 @@
 # Readme.md
 
-![logo.webp](load-cell/images/logo.webp)
+![image](https://github.com/user-attachments/assets/4b3d3244-ef37-4f2f-abc0-65cc674a48d0)
+
 ## Short Description of our Project
 The Smart Shelf project is an IoT-based inventory management system designed to monitor and manage stock levels in real-time. Utilizing sensors and cloud services, the system alerts users when stock levels are low, ensuring timely restocking and efficient inventory management.
 
@@ -33,7 +34,8 @@ The MVP of the Smart Shelf project is a functional system that includes sensor i
    - Logic Apps for workflow automation
    - Notification service
 
-   ![archi.jpeg](load-cell/images/archi.jpeg)
+   ![image](https://github.com/user-attachments/assets/6860032f-a6f2-4fd8-9e8c-1da8eb512dfb)
+
 
 
 
