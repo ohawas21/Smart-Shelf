@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Shelf Simulator</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<header>
+    <div class="header-left">
+        <span class="logo">📦 Smart Shelf</span>
+        <span class="status" id="connection-status">● Connecting...</span>
+    </div>
+    <div class="header-right">
+        <span id="alert-banner" class="alert-banner hidden"></span>
+    </div>
+</header>
+
+<div class="app">
+
+    <!-- LEFT — Product Panel -->
+    <aside class="product-panel">
+        <h2>Products</h2>
+        <p class="hint">Drag onto a shelf to add</p>
+        <div class="product-list" id="product-list">
+            {% for id, product in products.items() %}
+            <div class="product-card"
+                 draggable="true"
+                 data-product-id="{{ id }}"
+                 data-product-name="{{ product.name }}"
+                 data-product-weight="{{ product.weight }}"
+                 data-product-emoji="{{ product.emoji }}">
+                <span class="product-emoji">{{ product.emoji }}</span>
+                <div class="product-info">
+                    <div class="product-name">{{ product.name }}</div>
+                    <div class="product-weight">{{ product.weight }}g</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <!-- CENTRE — Shelves -->
+    <main class="shelves-area">
+        <h2>Shelves</h2>
+        {% for shelf_id, shelf in shelves.items() %}
+        <div class="shelf-card" id="shelf-{{ shelf_id }}" data-shelf-id="{{ shelf_id }}">
+
+            <div class="shelf-header">
+                <div class="shelf-title">
+                    <span class="shelf-icon">🗄️</span>
+                    <strong>{{ shelf.name }}</strong>
+                </div>
+                <div class="shelf-weight-info">
+                    <span class="weight-current" id="weight-{{ shelf_id }}">{{ shelf.current_weight }}g</span>
+                    <span class="weight-sep">/</span>
+                    <span class="weight-threshold" id="threshold-display-{{ shelf_id }}">{{ shelf.threshold }}g threshold</span>
+                </div>
+            </div>
+
+            <!-- Weight bar -->
+            <div class="weight-bar-bg">
+                <div class="weight-bar" id="bar-{{ shelf_id }}" style="width:0%"></div>
+            </div>
+
+            <!-- Drop zone -->
+            <div class="drop-zone" id="drop-{{ shelf_id }}"
+                 ondragover="event.preventDefault(); this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="handleDrop(event, '{{ shelf_id }}')">
+                <div class="products-on-shelf" id="products-{{ shelf_id }}">
+                    <span class="drop-hint">Drop products here</span>
+                </div>
+            </div>
+
+            <!-- Threshold control -->
+            <div class="threshold-control">
+                <label>Alert threshold:</label>
+                <input type="range" min="100" max="2000" step="100"
+                       value="{{ shelf.threshold }}"
+                       id="threshold-{{ shelf_id }}"
+                       oninput="updateThreshold('{{ shelf_id }}', this.value)">
+                <span id="threshold-value-{{ shelf_id }}">{{ shelf.threshold }}g</span>
+            </div>
+
+        </div>
+        {% endfor %}
+    </main>
+
+    <!-- RIGHT — Event log -->
+    <aside class="event-panel">
+        <h2>Event Log</h2>
+        <div class="event-log" id="event-log">
+            <div class="event-item info">System started — waiting for activity</div>
+        </div>
+    </aside>
+
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
