@@ -4,3 +4,4 @@ python-dotenv
 azure-iot-device
 sendgrid
 jinja2
+httpx

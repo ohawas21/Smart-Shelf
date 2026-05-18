@@ -1,6 +1,11 @@
 import os
 import json
 import asyncio
+import hmac
+import hashlib
+import base64
+import urllib.parse
+import time
 from datetime import datetime
 from typing import Dict, List
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -11,7 +16,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
-from azure.iot.device.aio import IoTHubDeviceClient
+import httpx
 
 load_dotenv()
 
@@ -35,48 +40,58 @@ shelves: Dict = {
     "shelf_c": {"id": "shelf_c", "name": "Shelf C", "products": [], "current_weight": 0, "threshold": 500, "alert_sent": False},
 }
 
-# ── IOT HUB CLIENTS ───────────────────────────────────────────────────────────
-iot_clients: Dict = {}
+# ── IOT HUB REST API ──────────────────────────────────────────────────────────
+def generate_sas_token(connection_string: str, expiry_seconds: int = 3600) -> dict:
+    """Parse connection string and generate SAS token for IoT Hub REST API."""
+    parts = dict(p.split("=", 1) for p in connection_string.split(";"))
+    hostname = parts["HostName"]
+    device_id = parts["DeviceId"]
+    key = parts["SharedAccessKey"]
 
-async def init_iot_clients():
-    """Connect each shelf as an IoT device to Azure IoT Hub."""
-    mapping = {
-        "shelf_a": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_A"),
-        "shelf_b": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_B"),
-        "shelf_c": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_C"),
-    }
-    for shelf_id, conn_str in mapping.items():
-        if conn_str:
-            try:
-                client = IoTHubDeviceClient.create_from_connection_string(conn_str, websockets=True)
-                await client.connect()
-                iot_clients[shelf_id] = client
-                print(f"  ✓ {shelf_id} connected to IoT Hub")
-            except Exception as e:
-                print(f"  ✗ {shelf_id} IoT Hub error: {e}")
-        else:
-            print(f"  ⚠ {shelf_id} — no connection string in .env")
+    uri = urllib.parse.quote(f"{hostname}/devices/{device_id}", safe="")
+    expiry = int(time.time()) + expiry_seconds
+    to_sign = f"{uri}\n{expiry}".encode("utf-8")
+    signature = base64.b64encode(
+        hmac.new(base64.b64decode(key), to_sign, hashlib.sha256).digest()
+    ).decode("utf-8")
+    token = f"SharedAccessSignature sr={uri}&sig={urllib.parse.quote(signature)}&se={expiry}"
+    return {"hostname": hostname, "device_id": device_id, "token": token}
 
 
 async def send_iot_message(shelf_id: str, weight: int, threshold: int, alert: bool):
-    """Send weight reading to Azure IoT Hub."""
-    client = iot_clients.get(shelf_id)
-    if not client:
+    """Send weight reading to Azure IoT Hub via REST API."""
+    conn_str = {
+        "shelf_a": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_A"),
+        "shelf_b": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_B"),
+        "shelf_c": os.environ.get("AZURE_IOT_CONNECTION_STRING_SHELF_C"),
+    }.get(shelf_id)
+
+    if not conn_str:
+        print(f"  ⚠ {shelf_id} — no connection string configured")
         return
 
-    payload = json.dumps({
-        "shelf_id":   shelf_id,
-        "shelf_name": shelves[shelf_id]["name"],
-        "weight":     weight,
-        "threshold":  threshold,
-        "low_stock":  alert,
-        "timestamp":  datetime.utcnow().isoformat(),
-    })
-
     try:
-        from azure.iot.device import Message
-        await client.send_message(Message(payload))
-        print(f"IoT Hub ← {shelf_id}: {weight}g (alert={alert})")
+        info = generate_sas_token(conn_str)
+        url = f"https://{info['hostname']}/devices/{info['device_id']}/messages/events?api-version=2021-04-12"
+        payload = json.dumps({
+            "shelf_id":   shelf_id,
+            "shelf_name": shelves[shelf_id]["name"],
+            "weight":     weight,
+            "threshold":  threshold,
+            "low_stock":  alert,
+            "timestamp":  datetime.utcnow().isoformat(),
+        })
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                content=payload,
+                headers={
+                    "Authorization": info["token"],
+                    "Content-Type":  "application/json",
+                },
+                timeout=5.0,
+            )
+        print(f"IoT Hub ← {shelf_id}: {weight}g (status={response.status_code})")
     except Exception as e:
         print(f"IoT send error: {e}")
 
@@ -163,18 +178,10 @@ def send_alert_email(shelf_name: str, weight: int, threshold: int, products: lis
         return False
 
 
-# ── STARTUP / SHUTDOWN ────────────────────────────────────────────────────────
+# ── STARTUP ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 async def startup():
-    print("Connecting to Azure IoT Hub...")
-    await init_iot_clients()
-    print("Smart Shelf server ready.\n")
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    for client in iot_clients.values():
-        await client.disconnect()
+    print("Smart Shelf server ready — using IoT Hub REST API.")
 
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
@@ -300,14 +307,11 @@ async def update_threshold(shelf_id: str, body: dict):
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Send initial state so the UI renders immediately on connect
         await websocket.send_json({
             "type":     "init",
             "shelves":  shelves,
             "products": PRODUCTS,
         })
-        # Keep connection alive with a heartbeat every 30 seconds
-        # (browser never sends text, so receive_text() would block/crash)
         while True:
             await asyncio.sleep(30)
             await websocket.send_json({"type": "ping"})
