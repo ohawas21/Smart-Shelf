@@ -1,7 +1,8 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-dotenv
-azure-iot-device
+httpx
 sendgrid
 jinja2
-httpx
+websockets
+
