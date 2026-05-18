@@ -1,6 +1,6 @@
 // ── WEBSOCKET ──────────────────────────────────────────────────────────────
-const ws = new WebSocket(`ws://${window.location.host}/ws`);
-const statusEl = document.getElementById('connection-status');
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);const statusEl = document.getElementById('connection-status');
 const alertBanner = document.getElementById('alert-banner');
 
 ws.onopen = () => {
