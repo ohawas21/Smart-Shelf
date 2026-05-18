@@ -48,7 +48,7 @@ async def init_iot_clients():
     for shelf_id, conn_str in mapping.items():
         if conn_str:
             try:
-                client = IoTHubDeviceClient.create_from_connection_string(conn_str)
+                client = IoTHubDeviceClient.create_from_connection_string(conn_str, websockets=True)
                 await client.connect()
                 iot_clients[shelf_id] = client
                 print(f"  ✓ {shelf_id} connected to IoT Hub")
